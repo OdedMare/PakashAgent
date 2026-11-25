@@ -89,6 +89,11 @@ def _rename_shift(connection, team_id: str, old: str, new: str) -> None:
             "UPDATE %s SET shift_name=%%s WHERE team_id=%%s AND shift_name=%%s" % table,
             (new, team_id, old),
         )
+    for column in ("before_shift", "after_shift"):
+        connection.execute(
+            "UPDATE constraint_requests SET %s=%%s WHERE team_id=%%s AND %s=%%s" % (column, column),
+            (new, team_id, old),
+        )
     for column in ("requester_shift", "counterparty_shift"):
         connection.execute(
             "UPDATE swap_requests SET %s=%%s WHERE team_id=%%s AND %s=%%s" % (column, column),

@@ -20,6 +20,7 @@ export function ShareLink({
   busy: boolean;
   onRotate: () => void;
 }) {
+  const [calendar, setCalendar] = useState(false);
   const [copied, setCopied] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -30,7 +31,7 @@ export function ShareLink({
   const url =
     typeof window === "undefined"
       ? ""
-      : `${window.location.origin}/team/${token}`;
+      : `${window.location.origin}/team/${token}${calendar ? "?view=constraints" : ""}`;
 
   const field = useRef<HTMLInputElement>(null);
 
@@ -54,9 +55,19 @@ export function ShareLink({
       <h3>
         <Link2 size={15} /> קישור לצוות
       </h3>
+      <label>יעד הקישור
+        <select value={calendar ? "constraints" : "schedule"} onChange={event => {
+          setCalendar(event.target.value === "constraints");
+          setCopied(false);
+          setCopyFailed(false);
+        }}>
+          <option value="schedule">סידור הצוות</option>
+          <option value="constraints">לוח הגשת אילוצים</option>
+        </select>
+      </label>
       <p className="share-lede">
-        שלחו את הקישור לעובדים. הוא פותח תצוגה לצפייה בלבד — בלי סיסמה ובלי
-        אפשרות לערוך.
+        {calendar ? "קישור אחד לכל הצוות. כל חייל נכנס עם הקוד האישי ושולח בקשה פרטית למנהל."
+          : "הקישור פותח את סידור המשמרות שפורסם לצוות."}
       </p>
 
       <div className="share-row">

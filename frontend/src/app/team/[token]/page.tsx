@@ -7,9 +7,11 @@ import { MemberEntry } from "@/components/Workspace/MemberEntry";
  *  credential in a URL that lands in history and in screenshots. */
 export default async function TeamPage({
   params,
+  searchParams,
 }: {
+  searchParams: Promise<{ view?: string }>;
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
-  return <MemberEntry token={token} />;
+  return <MemberEntry token={token} requests={(await searchParams).view === "constraints"} />;
 }

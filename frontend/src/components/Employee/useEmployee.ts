@@ -15,7 +15,7 @@ import {
   withdrawConstraintRequest,
   withdrawSwap,
 } from "@/services/api";
-import type { EmployeeView, RosterName } from "@/types";
+import type { ConstraintRequestPeriod, EmployeeView, RosterName } from "@/types";
 
 /** State for the employee's own area.
  *
@@ -98,8 +98,7 @@ export function useEmployee() {
   }, [run]);
 
   const submit = useCallback(
-    async (body: {
-      constraint_date: string;
+    async (body: ConstraintRequestPeriod & {
       shift_name?: string;
       available?: boolean;
       reason?: string;
@@ -116,6 +115,7 @@ export function useEmployee() {
             ...current.requests.map((row) =>
               row.status === "pending"
                 && row.constraint_date === done.constraint_date
+                && (row.end_date || row.constraint_date) === (done.end_date || done.constraint_date)
                 && (row.shift_name ?? "") === (done.shift_name ?? "")
                 ? { ...row, status: "withdrawn" as const }
                 : row,

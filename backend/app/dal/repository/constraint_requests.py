@@ -6,6 +6,7 @@ invisible to `audit.py`, so that asking cannot move the arithmetic (D3)."""
 from typing import List, Optional
 
 from app.common.errors import AgentError, AuthError, ConflictError
+from app.dal.database import atomic
 from app.dal.repository.base import RepositoryBase, new_id
 from app.dal.repository.request_status import (
     DECIDED, STATUS_PENDING, STATUS_WITHDRAWN,
@@ -21,6 +22,9 @@ class ConstraintRequestRepository(RepositoryBase):
         shift_name: str = "",
         available: bool = False,
         reason: str = "",
+        end_date: Optional[str] = None,
+        before_shift: str = "",
+        after_shift: str = "",
     ) -> dict:
         """Record a submission. Changes nothing about the schedule.
 
@@ -39,21 +43,23 @@ class ConstraintRequestRepository(RepositoryBase):
             raise AgentError("חסר שם עובד")
         if not constraint_date:
             raise AgentError("חסר תאריך")
-        self._execute("""
-            UPDATE constraint_requests SET status=%s
-            WHERE team_id=%s AND employee=%s AND constraint_date=%s
-              AND shift_name=%s AND status=%s
-        """, (STATUS_WITHDRAWN, team_id, employee, constraint_date,
-              shift_name or "", STATUS_PENDING))
-        row_id = new_id()
-        self._execute("""
-            INSERT INTO constraint_requests (
-                id, team_id, employee, constraint_date, shift_name,
-                available, reason, status
-            ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)
-        """, (row_id, team_id, employee, constraint_date, shift_name or "",
-              bool(available), reason or "", STATUS_PENDING))
-        return self.get_request(row_id, team_id)
+        with atomic(self._store):
+            self._execute("""
+                UPDATE constraint_requests SET status=%s
+                WHERE team_id=%s AND employee=%s AND constraint_date=%s
+                  AND shift_name=%s AND status=%s
+                  AND COALESCE(end_date, constraint_date)=%s
+            """, (STATUS_WITHDRAWN, team_id, employee, constraint_date,
+                  shift_name or "", STATUS_PENDING, end_date or constraint_date))
+            row_id = new_id()
+            self._execute("""
+                INSERT INTO constraint_requests (
+                    id, team_id, employee, constraint_date, shift_name,
+                    available, reason, status, end_date, before_shift, after_shift
+                ) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+            """, (row_id, team_id, employee, constraint_date, shift_name or "",
+                  bool(available), reason or "", STATUS_PENDING, end_date, before_shift, after_shift))
+            return self.get_request(row_id, team_id)
 
     def get_request(self, request_id: str, team_id: str) -> dict:
         return self._one("""

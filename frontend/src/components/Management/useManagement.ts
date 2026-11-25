@@ -490,6 +490,25 @@ export function useManagement(): ManagementState {
     [run],
   );
 
+  const overviewScheduleId = overview?.schedule?.id;
+  const runCellWrite = useCallback(
+    (periodId: string | undefined, action: () => Promise<Schedule>) => {
+      // Paged weeks have their own read. Only patch the overview for its own period.
+      if (periodId && periodId !== overviewScheduleId) return run(action);
+      return run(action, {
+        quiet: true,
+        apply: (schedule) => {
+          ++overviewToken.current;
+          setOverview((current) => current?.schedule?.id === schedule.id
+            ? { ...current, schedule }
+            : current);
+        },
+        deferRefresh: true,
+      });
+    },
+    [overviewScheduleId, run],
+  );
+
   /** Place one person on one slot. Quiet: see `run`. */
   const assign = useCallback(
     async (input: {
@@ -499,15 +518,10 @@ export function useManagement(): ManagementState {
       reason?: string;
       schedule_id?: string;
     }) => {
-      await run(() => assignEmployee(withPeriod(input)), {
-        quiet: true,
-        apply: (schedule) => setOverview((current) =>
-          current ? { ...current, schedule } : current
-        ),
-        deferRefresh: true,
-      });
+      const body = withPeriod(input);
+      await runCellWrite(body.schedule_id, () => assignEmployee(body));
     },
-    [run, withPeriod],
+    [runCellWrite, withPeriod],
   );
 
   /** Take one person off a slot. Quiet for the same reason as `assign`. */
@@ -517,9 +531,10 @@ export function useManagement(): ManagementState {
       reason?: string;
       schedule_id?: string;
     }) => {
-      await run(() => unassignEmployee(withPeriod(input)), { quiet: true });
+      const body = withPeriod(input);
+      await runCellWrite(body.schedule_id, () => unassignEmployee(body));
     },
-    [run, withPeriod],
+    [runCellWrite, withPeriod],
   );
 
   /** Empty a day's shifts, or the whole week's. The grid itself stays.

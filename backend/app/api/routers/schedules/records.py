@@ -14,16 +14,16 @@ _OK = {"status": "ok"}
 
 class ConstraintRoutes(RouteGroup):
     def register(self, router: APIRouter) -> None:
-        service, boss, visitor = self.service, self.boss, self.visitor
+        service, boss = self.service, self.boss
 
         @router.get("/constraints/list")
         def constraints(
             starts_on: Optional[str] = None,
             ends_on: Optional[str] = None,
             employee: Optional[str] = None,
-            session: dict = Depends(visitor),
+            session: dict = Depends(boss),
         ):
-            """Recorded constraints. Readable by the team, writable by the manager."""
+            """The manager’s team-wide constraint register."""
             return service.constraints(session["team_id"], starts_on, ends_on, employee)
 
         @router.post("/constraints")
@@ -50,7 +50,7 @@ class ConstraintRoutes(RouteGroup):
 
         @router.get("/history/list")
         def history(
-            schedule_id: Optional[str] = None, session: dict = Depends(visitor),
+            schedule_id: Optional[str] = None, session: dict = Depends(boss),
         ):
             """The append-only change log — the only history there is (D4)."""
             return service.history(session["team_id"], schedule_id)

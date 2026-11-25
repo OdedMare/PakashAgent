@@ -20,6 +20,7 @@ import type { RosterName } from "@/types";
  *  is already claimed needs to log in, and hiding it would just look broken.
  */
 export function IdentityGate({
+  requests,
   roster,
   busy,
   error,
@@ -28,6 +29,7 @@ export function IdentityGate({
   onDismissError,
 }: {
   /** `undefined` while the roster is still being fetched. */
+  requests: boolean;
   roster: RosterName[] | undefined;
   busy: boolean;
   error: string | null;
@@ -56,10 +58,10 @@ export function IdentityGate({
         <span className="brand-mark" aria-hidden="true">
           <UserCheck size={17} />
         </span>
-        <h1>האזור האישי</h1>
+        <h1>{requests ? "לוח הגשת אילוצים" : "האזור האישי"}</h1>
         <p className="gate-lede">
-          בחרו את השם שלכם מרשימת הצוות והגדירו קוד אישי. הקוד ישמור על
-          השעות והבקשות שלכם.
+          בחרו את השם שלכם והיכנסו בקוד האישי. בכניסה הראשונה בוחרים קוד.
+          {requests && " את הבקשות שלכם רואים רק אתם ומנהל הצוות."}
         </p>
 
         {error ? (

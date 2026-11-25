@@ -11,6 +11,7 @@ import type {
   Slot,
 } from "@/types";
 import { displayDate } from "@/components/DateInput";
+import { buildScheduleIndex } from "@/components/Board/scheduleIndex";
 import { orderByName } from "@/components/Board/shiftOrder";
 import { constraintBlocksSlot } from "@/lib/constraints";
 
@@ -52,11 +53,13 @@ export function Calendar({
   onDrop,
   onAssign,
   onUnassign,
+  onRequest,
 }: {
   schedule: Schedule;
   constraints: Constraint[];
   /** The roster, in profile order — what the colours are assigned from. */
   employees?: string[];
+  onRequest?: (date: string, shift: string) => void;
   readOnly?: boolean;
   dark?: boolean;
   onDrop?: (move: {
@@ -76,12 +79,12 @@ export function Calendar({
   // lose track of which cell the next click lands in.
   const [picking, setPicking] = useState<string | null>(null);
 
-  const dates = uniqueSorted(schedule.slots.map((slot) => slot.slot_date));
-  // Match the manager and complex boards: sorting the full shift name keeps
-  // each post's day and night rows together (e.g. פריצה יום, פריצה לילה).
-  const shifts = orderByName([
-    ...new Set(schedule.slots.map((slot) => slot.shift_name)),
-  ]);
+  const index = useMemo(() => buildScheduleIndex(schedule), [schedule]);
+  const dates = useMemo(
+    () => uniqueSorted(schedule.slots.map((slot) => slot.slot_date)),
+    [schedule.slots],
+  );
+  const shifts = useMemo(() => orderByName(index.shifts), [index]);
 
   // Colours come from the roster's own order, so ten people get ten distinct
   // hues. Names on the grid that the roster no longer carries still get a
@@ -89,16 +92,6 @@ export function Calendar({
   const hueOf = useMemo(() => buildPalette(employees), [employees]);
 
   const editable = !readOnly && Boolean(onAssign);
-
-  const assignmentsFor = (shift: string, date: string) =>
-    schedule.assignments.filter(
-      (row) => row.shift === shift && row.date === date,
-    );
-
-  const slotFor = (shift: string, date: string): Slot | undefined =>
-    schedule.slots.find(
-      (slot) => slot.shift_name === shift && slot.slot_date === date,
-    );
 
   return (
     <div className="calendar-scroll">
@@ -129,18 +122,14 @@ export function Calendar({
             <tr key={shift}>
               <th scope="row" className="calendar-shift">
                 {shift}
-                <ShiftTimes slot={slotFor(shift, dates[0])} shift={shift}
+                <ShiftTimes slot={index.slot(shift, dates[0])} shift={shift}
                   slots={schedule.slots} />
               </th>
               {dates.map((date) => {
-                const slot = slotFor(shift, date);
+                const slot = index.slot(shift, date);
                 const key = `${shift}|${date}`;
-                const rows = assignmentsFor(shift, date);
-                const cellWarnings = schedule.warnings.filter(
-                  (warning) =>
-                    warning.date === date &&
-                    (warning.shift === shift || warning.shift === ""),
-                );
+                const rows = index.assignments(shift, date);
+                const cellWarnings = index.warnings(shift, date);
                 // A slot that does not exist on this date is not a gap in the
                 // schedule — the shift simply does not run that day.
                 if (!slot) {
@@ -205,6 +194,9 @@ export function Calendar({
                       setDragging(null);
                     }}
                   >
+                    {onRequest && <button type="button" className="ghost-button"
+                      aria-label={`בקשת אילוץ · ${displayDate(date)} · ${shift}`}
+                      onClick={() => onRequest(date, shift)}><Plus size={13} /> אילוץ</button>}
                     <div className="calendar-people">
                       {rows.map((row) => (
                         <Person

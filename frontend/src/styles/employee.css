@@ -763,3 +763,11 @@
 .swap-status.is-declined {
   color: var(--danger);
 }
+
+.request-calendar { min-width: 0; margin-block: 1rem; padding: .75rem; border: 1px solid var(--border); border-radius: .65rem; }
+.request-edge { display: grid; gap: 6px; }
+.request-month { display: flex; align-items: center; justify-content: space-between; margin-bottom: .5rem; }
+.request-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: .2rem; text-align: center; }
+.request-calendar button { color: inherit; background: transparent; border: 1px solid transparent; border-radius: .35rem; padding: .4rem; cursor: pointer; }
+.request-calendar button:hover { border-color: currentColor; }
+.request-days button[aria-pressed="true"] { background: #245ca5; color: white; }

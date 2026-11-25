@@ -1,5 +1,7 @@
 import { Workspace } from "@/components/Workspace";
 
-export default function Page() {
-  return <Workspace />;
+export default async function Page({ searchParams }: {
+  searchParams: Promise<{ view?: string }>;
+}) {
+  return <Workspace requests={(await searchParams).view === "constraints"} />;
 }

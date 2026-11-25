@@ -2153,16 +2153,41 @@ def test_restating_a_constraint_replaces_rather_than_duplicates():
     assert rows[0]["reason"] == "מילואים"
 
 
-def test_the_team_can_read_constraints_but_not_write_them():
+def test_team_link_keeps_constraints_and_decision_history_private():
     app, _ = _build_app([])
     _client(app).post("/api/schedule/constraints", json={
         "employee": "דנה", "constraint_date": "2026-08-20", "reason": "תואר",
     })
     member = _client(app, role=ROLE_MEMBER)
-    assert len(member.get("/api/schedule/constraints/list").json()) == 1
+    assert member.get("/api/schedule/constraints/list").status_code == 401
+    assert member.get("/api/schedule/history/list").status_code == 401
+    overview = member.get("/api/schedule/overview").json()
+    assert overview["availability"] == []
+    assert overview["changes"] == []
+    assert "תואר" not in str(overview)
     assert member.post("/api/schedule/constraints", json={
         "employee": "יוסי", "constraint_date": "2026-08-21",
     }).status_code == 401
+
+
+def test_private_explanations_are_absent_from_every_shared_calendar_read():
+    app, repo = _build_app([])
+    boss = _client(app)
+    period = boss.post("/api/schedule/blank", json={
+        "starts_on": "2026-08-17", "ends_on": "2026-08-18",
+    }).json()
+    private_reason = "בדיקה אישית"
+    repo.schedules[period["id"]]["summary"] = private_reason
+    repo.schedules[period["id"]]["notes"] = [private_reason]
+    boss.post("/api/schedule/%s/publish" % period["id"])
+    assert private_reason in boss.get("/api/schedule/current").text
+    member = _client(app, role=ROLE_MEMBER)
+    for path in ("current", "overview", "at?day=2026-08-17",
+                 "between?start=2026-08-17&end=2026-08-18"):
+        response = member.get("/api/schedule/" + path)
+        assert response.status_code == 200
+        assert period["id"] in response.text
+        assert private_reason not in response.text
 
 
 def test_the_change_log_is_readable_as_history():

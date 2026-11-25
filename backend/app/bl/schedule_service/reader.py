@@ -37,7 +37,26 @@ class ScheduleReader:
         )
         if schedule is None:
             return None
-        return self._context.view(schedule, team_id)
+        return self._view(schedule, team_id, role)
+
+    def _view(self, schedule: dict, team_id: str, role: str) -> dict:
+        view = self._context.view(schedule, team_id)
+        if role == "boss":
+            return view
+        # Publish the roster, without private audit findings or the generator's
+        # explanations, which may quote an approved constraint.
+        public = {key: view[key] for key in ("id", "status", "starts_on", "ends_on", "slots", "closures")}
+        public["assignments"] = [
+            dict(row, reason="") for row in view["assignments"]
+        ]
+        public["warnings"] = [
+            warning for warning in view["warnings"]
+            if warning.get("code") == "unfilled"
+        ]
+        return public
+
+    def _period_view(self, schedule_id, team_id, role):
+        return self._view(self._repository.get_schedule(schedule_id, team_id), team_id, role)
 
     def get(self, schedule_id: str, team_id: str) -> dict:
         return self._context.fresh_view(schedule_id, team_id)
@@ -64,7 +83,7 @@ class ScheduleReader:
             if role != "boss" and period.get("status") != "published":
                 continue
             if rows.iso(period["starts_on"]) <= wanted <= rows.iso(period["ends_on"]):
-                return self._context.fresh_view(period["id"], team_id)
+                return self._period_view(period["id"], team_id, role)
         return None
 
     def periods_between(
@@ -100,7 +119,7 @@ class ScheduleReader:
                 found.append(period)
         found.sort(key=lambda period: rows.iso(period["starts_on"]))
         return [
-            self._context.fresh_view(period["id"], team_id) for period in found
+            self._period_view(period["id"], team_id, role) for period in found
         ]
 
     def check_placement(
@@ -145,6 +164,13 @@ class ScheduleReader:
         revision = self._repository.team_profile_revision(team_id)
         profile = self._context.profile(team_id)
         schedule = self.current(team_id, role)
+        if role != "boss":
+            return {
+                "today": israel_today().isoformat(),
+                "employees": [{"name": person["name"]} for person in rows.employees(profile) if person.get("name")],
+                "shifts": rows.shifts(profile),
+                "schedule": schedule,
+            }
         return {
             "today": israel_today().isoformat(),
             "profile": profile,

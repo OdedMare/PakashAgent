@@ -1,4 +1,5 @@
 import type {
+  ConstraintRequestPeriod,
   AdminComplex,
   AdminOverview,
   CommanderNotice,
@@ -1210,8 +1211,7 @@ export function acknowledgeChanges(): Promise<{
   return request("/api/employee/acknowledge", { method: "POST" });
 }
 
-export function submitConstraintRequest(body: {
-  constraint_date: string;
+export function submitConstraintRequest(body: ConstraintRequestPeriod & {
   shift_name?: string;
   available?: boolean;
   reason?: string;

@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS constraint_requests (
 
 COMMIT;
 
+ALTER TABLE constraint_requests
+    ADD COLUMN IF NOT EXISTS end_date DATE,
+    ADD COLUMN IF NOT EXISTS before_shift TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS after_shift TEXT NOT NULL DEFAULT '';
+
+COMMIT;
+
 CREATE INDEX IF NOT EXISTS constraint_requests_team_idx
     ON constraint_requests (team_id, status, created_at DESC);
 

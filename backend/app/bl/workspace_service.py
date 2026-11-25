@@ -76,7 +76,9 @@ class WorkspaceService:
         team = self._repository.get_team(team_id)
         view = _public(team, role=role, include_token=(role == ROLE_BOSS))
         view["profile_revision"] = self._repository.team_profile_revision(team_id)
-        view["profile"] = self._repository.team_profile(team_id)
+        profile = self._repository.team_profile(team_id)
+        view["profile"] = (profile if role == ROLE_BOSS or not profile
+                           else {"shifts": profile.get("shifts", [])})
         # The מכלול, for a boss only (D43): a member has no use for it.
         team_complex = getattr(self._repository, "team_complex", None)
         if role == ROLE_BOSS and team_complex is not None:

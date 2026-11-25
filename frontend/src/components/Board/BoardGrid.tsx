@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowDownAZ, Check, Trash2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
 
 import { buildPalette } from "@/components/Management/palette";
 import type { Assignment, CardPerson, Closure, Constraint, Schedule } from "@/types";
@@ -40,7 +40,7 @@ import { DayHead } from "./DayHead";
  *  rather than warned about after. That check contains no model call, so it
  *  works with the agent unavailable.
  */
-export function BoardGrid({
+export const BoardGrid = memo(function BoardGrid({
   schedule,
   dates,
   today,
@@ -427,4 +427,4 @@ export function BoardGrid({
       </div>
     </div>
   );
-}
+});

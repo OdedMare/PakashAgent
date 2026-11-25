@@ -642,7 +642,7 @@ export function Management({
             generating={state.generating}
             dark={theme === "dark"}
             onGenerate={state.generate}
-            onOpenDay={(date) => openAgent(date)}
+            onOpenDay={openAgent}
             onOpenBlank={state.openBlank}
             onAssign={state.assign}
             onUnassign={state.unassign}

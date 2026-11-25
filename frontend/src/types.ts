@@ -1003,10 +1003,16 @@ export interface PersonalSummary {
 
 /** A constraint an employee asked for. **Pending changes nothing** — it is
  *  invisible to the audit until a manager approves it (D14). */
-export interface ConstraintRequestRow {
+export interface ConstraintRequestPeriod {
+  constraint_date: string;
+  end_date?: string | null;
+  before_shift?: string;
+  after_shift?: string;
+}
+
+export interface ConstraintRequestRow extends ConstraintRequestPeriod {
   id: string;
   employee: string;
-  constraint_date: string;
   shift_name: string;
   available: boolean;
   reason: string;

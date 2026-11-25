@@ -3,7 +3,7 @@
 import { Inbox, X } from "lucide-react";
 import { useEffect } from "react";
 
-import { shortDate } from "@/components/DateInput";
+import { requestPeriodLabel } from "@/components/dateFormat";
 import type { ConstraintRequestRow } from "@/types";
 
 /** The pop-up that says an employee just submitted a constraint.
@@ -49,8 +49,8 @@ export function RequestToast({
         </strong>
         <span>
           {more > 0
-            ? `האחרון: ${latest.employee} · ${shortDate(latest.constraint_date)}`
-            : `${shortDate(latest.constraint_date)} · ${latest.shift_name || "כל היום"} · ${latest.available ? "מבקש/ת לעבוד" : "מבקש/ת לא לעבוד"}`}
+            ? `האחרון: ${latest.employee} · ${requestPeriodLabel(latest)}`
+            : `${requestPeriodLabel(latest)} · ${latest.available ? "מבקש/ת לעבוד" : "מבקש/ת לא לעבוד"}`}
         </span>
       </div>
       <button type="button" className="request-toast-open" onClick={onOpen}>

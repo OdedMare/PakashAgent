@@ -1,16 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 
-import { CommanderArea, CommanderBar } from "@/components/Complex";
+import { CommanderBar } from "@/components/Complex/CommanderBar";
 import { CrewLoading } from "@/components/Crew";
-import { Employee } from "@/components/Employee";
-import { Management } from "@/components/Management";
-import { ManualSetup } from "@/components/ManualSetup";
 
 import { Login } from "./Login";
-import { MemberArea } from "./MemberArea";
 import { useWorkspace } from "./useWorkspace";
+
+const CommanderArea = lazy(() => import("@/components/Complex/CommanderArea").then(({ CommanderArea }) => ({ default: CommanderArea })));
+const Employee = lazy(() => import("@/components/Employee").then(({ Employee }) => ({ default: Employee })));
+const Management = lazy(() => import("@/components/Management").then(({ Management }) => ({ default: Management })));
+const ManualSetup = lazy(() => import("@/components/ManualSetup").then(({ ManualSetup }) => ({ default: ManualSetup })));
+const MemberArea = lazy(() => import("./MemberArea").then(({ MemberArea }) => ({ default: MemberArea })));
 
 /** Chooses the surface for whoever is at the door.
  *
@@ -19,7 +21,15 @@ import { useWorkspace } from "./useWorkspace";
  *  the browser performs. The backend guards every route independently — a
  *  visitor who forced their way past this component would still be refused by
  *  `Guards.boss()` on the API. */
-export function Workspace({ memberToken }: { memberToken?: string }) {
+export function Workspace({ requests = false }: { requests?: boolean }) {
+  return (
+    <Suspense fallback={<CrewLoading />}>
+      <WorkspaceContent requests={requests} />
+    </Suspense>
+  );
+}
+
+function WorkspaceContent({ requests }: { requests: boolean }) {
   const state = useWorkspace();
   const { workspace } = state;
 
@@ -58,14 +68,14 @@ export function Workspace({ memberToken }: { memberToken?: string }) {
   }
 
   if (workspace.role === "member") {
-    return <MemberSurface state={state} workspace={workspace} />;
+    return <MemberSurface requests={requests} state={state} workspace={workspace} />;
   }
 
   // An employee who signed in personally. The role is on the signed cookie,
   // so this is a render of what the server decided — every route the personal
   // area calls is guarded independently by `Guards.employee()`.
   if (workspace.role === "employee") {
-    return <Employee onLeave={state.logout} />;
+    return <Employee openRequests={requests} onLeave={state.logout} />;
   }
 
   return <BossSurface state={state} workspace={workspace} />;
@@ -137,23 +147,28 @@ function BossSurface({
  *  claiming is deliberate — a team that does not want identities is not
  *  forced into them. */
 function MemberSurface({
+  requests,
   state,
   workspace,
 }: {
+  requests: boolean;
   state: ReturnType<typeof useWorkspace>;
   workspace: NonNullable<ReturnType<typeof useWorkspace>["workspace"]>;
 }) {
-  const [personal, setPersonal] = useState(false);
+  const [destination, setDestination] = useState<"team" | "personal" | "requests">(
+    requests ? "requests" : "team"
+  );
 
-  if (personal) {
-    return <Employee onLeave={() => setPersonal(false)} />;
+  if (destination !== "team") {
+    return <Employee openRequests={destination === "requests"} onLeave={() => setDestination("team")} />;
   }
 
   return (
     <MemberArea
       workspace={workspace}
       onLeave={state.logout}
-      onOpenPersonal={() => setPersonal(true)}
+      onOpenPersonal={() => setDestination("personal")}
+      onOpenRequests={() => setDestination("requests")}
     />
   );
 }

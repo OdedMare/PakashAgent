@@ -242,18 +242,19 @@ test("an older overview response cannot replace the read made after approval", a
   assert.equal(h.render().overview, fresh);
 });
 
-test("manual assignments use their schedule response and coalesce overview refreshes", async () => {
+test("manual additions and removals use their schedule response and coalesce overview refreshes", async () => {
   let reads = 0, writes = 0;
   const initial = {
     schedule: { id: "week", assignments: [], generation: { status: "completed" } },
     employees: [],
   };
   const final = {
-    schedule: { id: "week", assignments: [{ id: "two" }], generation: { status: "completed" } },
+    schedule: { id: "week", assignments: [], generation: { status: "completed" } },
     employees: [],
   };
   const h = hook("components/Management/useManagement.ts", "useManagement", {
     scheduleOverview: async () => (++reads === 1 ? initial : final),
+    unassignEmployee: async () => ({ id: "week", assignments: [] }),
     assignEmployee: async () => ({
       id: "week",
       assignments: [{ id: ++writes === 1 ? "one" : "two" }],
@@ -265,6 +266,8 @@ test("manual assignments use their schedule response and coalesce overview refre
   await h.render().assign({ shift_name: "בוקר", slot_date: "2026-11-03", employee: "יוסי" });
 
   assert.equal(h.render().overview.schedule.assignments[0].id, "two");
+  await h.render().unassign({ assignment_id: "two", schedule_id: "week" });
+  assert.equal(h.render().overview.schedule.assignments.length, 0);
   assert.equal(reads, 1);
   await new Promise((resolve) => setTimeout(resolve, 800));
   await h.settle();

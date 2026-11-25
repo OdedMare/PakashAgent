@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import { approveRequest, rejectRequest } from "@/services/api";
 import type { ConstraintRequestRow } from "@/types";
-import { shortDate } from "@/components/DateInput";
+import { requestPeriodLabel } from "@/components/dateFormat";
 
 /** Constraint requests waiting on the manager.
  *
@@ -84,8 +84,7 @@ export function RequestInbox({
             <div className="request-head">
               <strong>{row.employee}</strong>
               <span className="request-date">
-                {shortDate(row.constraint_date)}
-                {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
+                {requestPeriodLabel(row)}
               </span>
             </div>
             {/* `available` inverts the meaning: an offer to work, not a

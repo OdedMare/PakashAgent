@@ -122,18 +122,21 @@ class _FakeIdentities:
 
     # -- requests --
     def submit_request(self, team_id, employee, constraint_date,
-                       shift_name="", available=False, reason=""):
+                       shift_name="", available=False, reason="", end_date=None,
+                       before_shift="", after_shift=""):
         self._next += 1
         row_id = "req-%d" % self._next
         for row in self.requests.values():
             if (row["team_id"] == team_id and row["employee"] == employee
                     and row["constraint_date"] == constraint_date
+                    and (row.get("end_date") or constraint_date) == (end_date or constraint_date)
                     and row["shift_name"] == (shift_name or "")
                     and row["status"] == "pending"):
                 row["status"] = "withdrawn"
         self.requests[row_id] = {
             "id": row_id, "team_id": team_id, "employee": employee,
             "constraint_date": constraint_date, "shift_name": shift_name or "",
+            "end_date": end_date, "before_shift": before_shift, "after_shift": after_shift,
             "available": available, "reason": reason, "status": "pending",
             "decided_reason": "", "decided_at": None,
         }
@@ -942,3 +945,34 @@ def test_the_personal_view_no_longer_carries_the_teams_hours(client):
     _claim(client)
 
     assert "fairness" not in client.get("/api/employee/me").json()
+
+
+def test_approve_leave_across_month_boundary(context):
+    client, _, schedules = context
+    _as(client, ROLE_EMPLOYEE, name=DANA)
+    response = client.post("/api/employee/requests", json={
+        "constraint_date": "2026-11-30", "end_date": "2026-12-01",
+        "before_shift": "ערב", "after_shift": "בוקר",
+    })
+    assert response.status_code == 200
+    assert not schedules.constraints
+    _as(client, ROLE_BOSS)
+    approved = client.post("/api/schedule/requests/%s/approve" % response.json()["id"], json={})
+    assert approved.status_code == 200
+    assert {(row["constraint_date"], row["shift_name"]) for row in schedules.constraints} == {
+        ("2026-11-29", "ערב"), ("2026-11-30", ""), ("2026-12-01", ""), ("2026-12-02", "בוקר"),
+    }
+
+
+@pytest.mark.parametrize("fields", [
+    {"end_date": "2026-01-01"},
+    {"end_date": "2026-02-30"},
+    {"available": True, "after_shift": "בוקר"},
+])
+def test_invalid_leave_does_not_replace_pending_request(context, fields):
+    client, repository, _ = context
+    _as(client, ROLE_EMPLOYEE, name=DANA)
+    existing = repository.submit_request(TEAM, DANA, "2026-02-01")
+    response = client.post("/api/employee/requests", json={"constraint_date": "2026-02-01", **fields})
+    assert 400 <= response.status_code < 500
+    assert repository.list_requests(TEAM) == [existing]

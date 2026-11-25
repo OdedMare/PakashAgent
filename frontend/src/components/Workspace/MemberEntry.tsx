@@ -15,7 +15,7 @@ import { Workspace } from "./index";
  *  travelling with every subsequent navigation. `replaceState` rather than a
  *  router push, so the token-bearing URL is not left behind in the back
  *  stack. */
-export function MemberEntry({ token }: { token: string }) {
+export function MemberEntry({ token, requests }: { token: string; requests: boolean }) {
   const [failed, setFailed] = useState(false);
   const [done, setDone] = useState(false);
   // React 18 mounts effects twice in development. Redeeming twice is
@@ -28,11 +28,11 @@ export function MemberEntry({ token }: { token: string }) {
     redeemed.current = true;
     openMemberLink(token)
       .then(() => {
-        window.history.replaceState(null, "", "/");
+        window.history.replaceState(null, "", requests ? "/?view=constraints" : "/");
         setDone(true);
       })
       .catch(() => setFailed(true));
-  }, [token]);
+  }, [token, requests]);
 
   if (failed) {
     return (
@@ -54,5 +54,5 @@ export function MemberEntry({ token }: { token: string }) {
     return <CrewLoading label="פותחים את הסידור של הצוות…" />;
   }
 
-  return <Workspace />;
+  return <Workspace requests={requests} />;
 }

@@ -68,6 +68,9 @@ class PersonalRoutes:
                 shift_name=request.shift_name,
                 available=request.available,
                 reason=request.reason,
+                end_date=request.end_date,
+                before_shift=request.before_shift,
+                after_shift=request.after_shift,
             )
             notify(session["team_id"], REQUESTS)
             return row

@@ -42,9 +42,11 @@ export function MemberArea({
   workspace,
   onLeave,
   onOpenPersonal,
+  onOpenRequests,
 }: {
   workspace: TeamView;
   onLeave: () => void;
+  onOpenRequests: () => void;
   onOpenPersonal?: () => void;
 }) {
   const { theme, toggle } = useTheme();
@@ -109,6 +111,9 @@ export function MemberArea({
       </header>
 
       <main id="main-content" className="member-main">
+        <button type="button" className="ghost-button" onClick={onOpenRequests}>
+          <CalendarClock size={16} /> הגשת אילוץ למנהל
+        </button>
         {schedule ? (
           <div className="member-schedule" data-tour="member-schedule">
             <div className="management-toolbar">
@@ -124,7 +129,7 @@ export function MemberArea({
                 merely enforced on the server. */}
             <Calendar
               schedule={schedule}
-              constraints={overview?.availability ?? []}
+              constraints={[]}
               employees={roster}
               dark={theme === "dark"}
               readOnly

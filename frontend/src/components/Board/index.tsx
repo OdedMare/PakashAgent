@@ -1,10 +1,11 @@
 "use client";
 
 import { EyeOff, LockKeyhole } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
   AgentAnswer,
+  Assignment,
   Constraint,
   ManagementOverview,
   Proposal,
@@ -39,6 +40,8 @@ import { useRosterMaps } from "./useRosterMaps";
 import { BoardLoading, BoardLoadError, EmptyWeek } from "./BoardStates";
 import { covers, statsFor, EMPTY_STATS } from "./boardStats";
 import { AgentTouchBar } from "./AgentTouchBar";
+
+const NO_CONSTRAINTS: Constraint[] = [];
 
 /** The manager's operational home screen.
  *
@@ -313,7 +316,7 @@ export function Board({
   } = usePlacementDialogs(board.check, schedule?.id);
 
   const stats = overview?.stats ?? EMPTY_STATS;
-  const constraints: Constraint[] = overview?.availability ?? [];
+  const constraints = overview?.availability ?? NO_CONSTRAINTS;
 
   // Arrow keys page by whatever is on screen — a day, a week, a month; `T`
   // returns to today. Disabled while a dialog is open — the confirmation
@@ -332,6 +335,30 @@ export function Board({
   // clearing underneath either would be racing something.
   const writable =
     Boolean(schedule) && schedule?.status === "draft" && !busy && !generating;
+
+  const scheduleId = schedule?.id;
+  const dropEmployee = useCallback((input: { employee: string; shift_name: string; slot_date: string }) => {
+    if (scheduleId) void onAssign({ ...input, schedule_id: scheduleId });
+  }, [onAssign, scheduleId]);
+  const removeCard = useCallback((assignment: Assignment) => {
+    if (scheduleId) void onUnassign({ assignment_id: assignment.id, schedule_id: scheduleId });
+  }, [onUnassign, scheduleId]);
+  const editCard = useCallback((assignment: Assignment) => {
+    setCheck(null);
+    setEditor({ mode: "edit", assignment });
+  }, [setCheck, setEditor]);
+  const addShift = useCallback((input: { shift_name: string; slot_date: string }) => {
+    setCheck(null);
+    setEditor({ mode: "create", ...input });
+  }, [setCheck, setEditor]);
+  const periodEnd = schedule?.ends_on;
+  const buildFrom = useCallback((date: string) => {
+    if (periodEnd) setBuilding({ from: date, through: earlier(saturdayOf(date), periodEnd), inPeriod: true });
+  }, [periodEnd]);
+  const assignments = schedule?.assignments;
+  const clearDay = useCallback((date: string) => {
+    if (assignments) setRemoval({ mode: "day", date, count: assignments.filter((row) => row.date === date).length });
+  }, [assignments]);
 
   // The figures for the week on screen. The overview computed them for the
   // *current* period; a week the manager paged to counts itself. Memoised
@@ -576,49 +603,13 @@ export function Board({
               readOnly={schedule.status === "published"}
               touches={touches}
               onDropCard={openMove}
-              onDropEmployee={(input) =>
-                void onAssign({ ...input, schedule_id: schedule.id })}
-              onRemoveCard={(assignment) =>
-                void onUnassign({
-                  assignment_id: assignment.id,
-                  schedule_id: schedule.id,
-                })}
-              onOpenCard={(assignment) => {
-                setCheck(null);
-                setEditor({ mode: "edit", assignment });
-              }}
-              onAddShift={(input) => {
-                setCheck(null);
-                setEditor({
-                  mode: "create",
-                  shift_name: input.shift_name,
-                  slot_date: input.slot_date,
-                });
-              }}
+              onDropEmployee={dropEmployee}
+              onRemoveCard={removeCard}
+              onOpenCard={editCard}
+              onAddShift={addShift}
               onOpenDay={onOpenDay}
-              // "From this day until Saturday" — the rest of the week from
-              // wherever the manager is standing in it. The dialog lets
-              // them end it on any other day the period holds.
-              onBuildFrom={
-                writable
-                  ? (date) =>
-                      setBuilding({
-                        from: date,
-                        through: earlier(saturdayOf(date), schedule.ends_on),
-                        inPeriod: true,
-                      })
-                  : undefined}
-              onClearDay={
-                writable
-                  ? (date) =>
-                      setRemoval({
-                        mode: "day",
-                        date,
-                        count: schedule.assignments.filter(
-                          (row) => row.date === date,
-                        ).length,
-                      })
-                  : undefined}
+              onBuildFrom={writable ? buildFrom : undefined}
+              onClearDay={writable ? clearDay : undefined}
               onOpenDate={board.openDay}
           />
         </>

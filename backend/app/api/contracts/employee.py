@@ -56,6 +56,9 @@ class ConstraintSubmission(BaseModel):
     """
 
     constraint_date: str = Field(min_length=1)
+    end_date: str = ""
+    before_shift: str = Field(default="", max_length=120)
+    after_shift: str = Field(default="", max_length=120)
     shift_name: str = Field(default="", max_length=120)
     available: bool = False
     reason: str = Field(default="", max_length=1000)

@@ -3,8 +3,10 @@
 import { CalendarPlus, Check, Clock3, X } from "lucide-react";
 import { useState } from "react";
 
-import { DateInput, shortDate } from "@/components/DateInput";
-import type { ConstraintRequestRow } from "@/types";
+import { RequestCalendar } from "./RequestCalendar";
+import { adjacentDateLabel, requestPeriodLabel } from "../dateFormat";
+import { DateInput } from "@/components/DateInput";
+import type { ConstraintRequestPeriod, ConstraintRequestRow } from "@/types";
 
 /** Ask not to be scheduled — and see what happened to previous asks.
  *
@@ -19,25 +21,29 @@ import type { ConstraintRequestRow } from "@/types";
  *  Shift is optional: empty means the whole day, read exactly as
  *  `availability.shift_name` is. */
 export function ConstraintForm({
+  initial,
   shiftNames,
   requests,
   busy,
   onSubmit,
   onWithdraw,
 }: {
+  initial?: { date: string; shift: string };
   shiftNames: string[];
   requests: ConstraintRequestRow[];
   busy: boolean;
-  onSubmit: (body: {
-    constraint_date: string;
+  onSubmit: (body: ConstraintRequestPeriod & {
     shift_name?: string;
     available?: boolean;
     reason?: string;
   }) => Promise<boolean>;
   onWithdraw: (requestId: string) => void;
 }) {
-  const [date, setDate] = useState("");
-  const [shift, setShift] = useState("");
+  const [date, setDate] = useState(initial?.date || "");
+  const [end, setEnd] = useState("");
+  const [before, setBefore] = useState("");
+  const [after, setAfter] = useState("");
+  const [shift, setShift] = useState(initial?.shift || "");
   const [reason, setReason] = useState("");
   // "I can work this" is the rarer case but a real one, and a manager wants
   // it: an offer to cover is information the schedule can use.
@@ -48,12 +54,18 @@ export function ConstraintForm({
     if (!date) return;
     const sent = await onSubmit({
       constraint_date: date,
+      end_date: end || date,
+      before_shift: available ? "" : before,
+      after_shift: available ? "" : after,
       shift_name: shift,
       available,
       reason,
     });
     if (sent) {
       setDate("");
+      setEnd("");
+      setBefore("");
+      setAfter("");
       setShift("");
       setReason("");
       setAvailable(false);
@@ -66,11 +78,13 @@ export function ConstraintForm({
         <CalendarPlus size={15} /> בקשת אילוץ
       </h2>
       <p className="employee-note">
-        הבקשה נשלחת למנהל לאישור. עד שהמנהל יאשר אותה היא לא משנה את הסידור.
+        רק אתם ומנהל הצוות רואים את הבקשה ואת הסיבה שכתבתם. עד שהמנהל יאשר אותה היא לא משנה את הסידור.
       </p>
 
+      <RequestCalendar start={date} end={end} disabled={busy}
+        onSelect={(first, last) => { setDate(first); setEnd(last); }} />
       <form className="employee-constraint-form" onSubmit={submit}>
-        <label htmlFor="constraint-date">תאריך</label>
+        <label htmlFor="constraint-date">תאריך התחלה</label>
         <DateInput
           id="constraint-date"
           value={date}
@@ -78,6 +92,10 @@ export function ConstraintForm({
           disabled={busy}
           required
         />
+
+        <label htmlFor="constraint-end">עד תאריך (כולל)</label>
+        <input id="constraint-end" type="date" min={date} value={end} disabled={busy}
+          onChange={(event) => setEnd(event.target.value)} />
 
         <label htmlFor="constraint-shift">משמרת</label>
         <select
@@ -88,7 +106,7 @@ export function ConstraintForm({
         >
           {/* Empty is the whole day — the default, and the common case. */}
           <option value="">כל היום</option>
-          {shiftNames.map((name) => (
+          {Array.from(new Set([...shiftNames, ...(initial?.shift ? [initial.shift] : [])])).map((name) => (
             <option key={name} value={name}>
               {name}
             </option>
@@ -115,6 +133,17 @@ export function ConstraintForm({
           <span>אני דווקא כן יכול/ה לעבוד אז</span>
         </label>
 
+        {!available && shiftNames.length > 0 && [
+          { label: "חסימת משמרת ביום שלפני התקופה", day: adjacentDateLabel(date, -1), value: before, change: setBefore },
+          { label: "חסימת משמרת ביום שאחרי התקופה", day: adjacentDateLabel(end || date, 1), value: after, change: setAfter },
+        ].map(({ label, day, value, change }) => (
+          <label className="request-edge" key={label}>{label}{day && ` · ${day}`}
+            <select value={value} disabled={busy} onChange={(event) => change(event.target.value)}>
+              <option value="">ללא חסימה נוספת</option>
+              {shiftNames.map(name => <option key={name} value={name}>{name}</option>)}
+            </select>
+          </label>
+        ))}
         <button type="submit" disabled={!date || busy}>
           שליחה לאישור
         </button>
@@ -129,8 +158,7 @@ export function ConstraintForm({
                 <div className="request-head">
                   <StatusBadge status={row.status} />
                   <span className="request-date">
-                    {shortDate(row.constraint_date)}
-                    {row.shift_name ? ` · ${row.shift_name}` : " · כל היום"}
+                    {requestPeriodLabel(row)}
                   </span>
                 </div>
                 {row.reason ? (

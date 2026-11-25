@@ -39,11 +39,12 @@ import { shortDate } from "@/components/DateInput";
  *  Everything shown is scoped server-side by the name in the signed cookie.
  *  There is no name parameter anywhere in this component tree, which is what
  *  keeps one employee out of another's hours and stated reasons. */
-export function Employee({ onLeave }: { onLeave?: () => void }) {
+export function Employee({ onLeave, openRequests = false }: { onLeave?: () => void; openRequests?: boolean }) {
   const { theme, toggle } = useTheme();
   const state = useEmployee();
   const { view } = state;
-  const [section, setSection] = useState<EmployeeSection>("mine");
+  const [section, setSection] = useState<EmployeeSection>(openRequests ? "requests" : "mine");
+  const [initial, setInitial] = useState<{ date: string; shift: string }>();
   // Only once signed in: the claim gate has none of what the tour points at.
   useGuideSurface(view ? "employee" : null);
 
@@ -56,6 +57,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
   if (view === null) {
     return (
       <IdentityGate
+        requests={openRequests}
         roster={state.roster}
         busy={state.busy}
         error={state.error}
@@ -141,7 +143,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
             label="בקשות והחלפות"
             badge={pendingCount(view)}
             tour="employee-requests-tab"
-            onClick={() => setSection("requests")}
+            onClick={() => { setInitial(undefined); setSection("requests"); }}
           />
           <EmployeeTab
             active={section === "schedule"}
@@ -166,7 +168,9 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
 
           {section === "requests" ? (
             <>
+              {state.error && <p role="alert">{state.error}</p>}
               <ConstraintForm
+                initial={initial}
                 shiftNames={shiftNames}
                 requests={view.requests}
                 busy={state.busy}
@@ -200,6 +204,7 @@ export function Employee({ onLeave }: { onLeave?: () => void }) {
                   schedule={view.schedule}
                   constraints={view.summary.constraints}
                   dark={theme === "dark"}
+                  onRequest={(date, shift) => { setInitial({ date, shift }); setSection("requests"); }}
                   readOnly
                 />
               </section>
